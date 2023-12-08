@@ -1,0 +1,516 @@
+---
+title: "Primary_production_first_try"
+author: "Chris Carnivale"
+date: "4/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+require(tidyverse)
+require(seacarb)
+require(modelr)
+require(phytotools)
+require(magrittr)
+require(ggpubr)
+require(lme4)
+require(lmerTest)
+```
+
+#DIC DYIV Calculation 
+
+Post DIC calculation, then I can do from CPMs to ug of Carbon fixed per hour.
+
+```{r DYIV DIC}
+View(carb(flag = 8, 7.3, 0.00097377, S = 0, T = 16))
+```
+
+#Carbon Fixation rate calculation
+
+```{r mixo mp PP ugram per L}
+mixo_phys_pp <- read.csv("mixo_mp_pp.csv")
+
+str(mixo_phys_pp)
+
+mixo_phys_pp$Time_days <- factor(mixo_phys_pp$Time_days)
+
+mixo_phys_pp$Treatment_plastic <- factor(mixo_phys_pp$Treatment_plastic,levels = c("control", "10","1000", "100000"))
+
+mixo_phy_pp_calc <- mixo_phys_pp %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+#0.1 for bckgr_CPM because 0.1 ml was processed
+#12 is the molar mass of carbon o convert from umol to ugrams
+#1.029 is to convert from kg to L of Seawater
+#2 is to get an hourly uptake since it was exposed for 2 hours
+
+ggplot(filter(mixo_phy_pp_calc, !Rep == "A"),aes(x = Treatment_plastic, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot(aes(fill = Time_days))
+
+ggplot(mixo_phy_pp_calc,aes(x = Time_days, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_phy_pp_calc, Time_days == "0"),aes(x = Treatment_plastic, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot()
+
+ggplot(filter(mixo_phy_pp_calc, Time_days == "2"),aes(x = Treatment_plastic, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot()
+
+ggplot(filter(mixo_phy_pp_calc, !(Rep == "A" & Treatment_plastic == "control")),aes(x = Time_days, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(mixo_phy_pp_calc, aes(x = Time_days, y = ugram_Cfixed_per_L_hr))+
+  geom_point(aes(color = Treatment_plastic))
+
+#pp_mod1 <- lm(ugram_Cfixed_per_L_hr ~ Time_days + Treatment_plastic, data = mixo_phy_pp_calc)
+
+#pp_mod2 <- lm(ugram_Cfixed_per_L_hr ~ Time_days * Treatment_plastic, data = mixo_phy_pp_calc)
+
+#mod_grid <- mixo_phy_pp_calc %>% 
+#  data_grid(Time_days, Treatment_plastic) %>% 
+#  gather_predictions()
+```
+
+Revisit the model building after I have normalized data. Building a model around
+the raw C fixation rates is a waste of time
+
+```{r mixo mp normailize to per cell}
+mixo_mp_pp_norm <- mixo_phy_pp_calc %>% 
+  mutate(cell_per_L = Cell_counts/1.35*Zeiss_CF*1000, ugram_Cfixed_perCELL_perHR
+         = ugram_Cfixed_per_L_hr/cell_per_L,
+         pg_perCELL_perHR = ugram_Cfixed_perCELL_perHR*1000000)
+
+str(mixo_mp_pp_norm)
+
+
+
+ggplot(mixo_mp_pp_norm, aes(x = Time_days, y = pg_perCELL_perHR))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_mp_pp_norm, !(Rep == "B" & Treatment_plastic == "control")), aes(x = Time_days, y = pg_perCELL_perHR))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_mp_pp_norm, Time_days == "0"| Time_days == "2" | Time_days == "4" | Time_days == "7", !(Rep == "B" & Treatment_plastic == "control")),aes(x = Time_days, y = pg_perCELL_perHR))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_mp_pp_norm, Time_days == "0"| Time_days == "2" | Time_days == "4" | Time_days == "7", !Rep == "B"),aes(x = Time_days, y = pg_perCELL_perHR))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_mp_pp_norm, Time_days == "0"| Time_days == "2" | Time_days == "4" | Time_days == "7", !(Rep == "B" & Treatment_plastic == "control")),aes(x = Time_days, y = cell_per_L))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_mp_pp_norm, Time_days == "0"| Time_days == "2" | Time_days == "4" | Time_days == "7", !Rep == "C"),aes(x = Time_days, y = pg_perCELL_perHR))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_mp_pp_norm, Time_days == "0"| Time_days == "2" | Time_days == "4" | Time_days == "7", !Rep == "D"),aes(x = Time_days, y = pg_perCELL_perHR))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+
+ggplot(filter(mixo_mp_pp_norm, Time_days == "0"| Time_days == "2"| Time_days == "4"| Time_days == "7"),aes(x = Time_days, y = cell_per_L))+
+  geom_boxplot(aes(fill = Treatment_plastic))
+```
+
+
+```{r mixo mp growth curves}
+mixo_mp_abund <- read.csv("mixo_mp_abundance.csv")
+
+mixo_mp_abund$Treatment <- factor(mixo_mp_abund$Treatment,levels = c("Control", "10","1000", "100000"))
+
+mixo_mp_gc <- mixo_mp_abund %>% 
+  mutate(cell_per_L = Cell_counts/1.35*Zeiss_CF*1000)
+
+mixo_mp_gc_sum <- mixo_mp_gc %>% 
+  group_by(Time_days, Treatment) %>% 
+  summarise(avg_cell_per_L = mean(cell_per_L))
+
+ggplot(mixo_mp_gc)+
+  geom_point(aes(x = Time_days, y = cell_per_L, color = Treatment))+
+  geom_line(data = mixo_mp_gc_sum, aes(x = Time_days, y = avg_cell_per_L, color = Treatment))
+
+#Plotting abundance without Rep B
+
+ggplot(data = filter(mixo_mp_gc, !(Rep == "B" & Treatment == "Control")))+
+  geom_point(data = filter(mixo_mp_gc, !(Rep == "B" & Treatment == "Control")), aes(x = Time_days, y = cell_per_L, color = Treatment))+
+  geom_line(data = mixo_mp_gc_sum, aes(x = Time_days, y = avg_cell_per_L, color = Treatment))
+
+#need to change the value of the summarised data
+
+mixo_mp_gc_noBcon <- filter(mixo_mp_gc, !(Rep == "B" & Treatment == "Control"))
+
+mixo_mp_gc_sum_noBcon <- mixo_mp_gc_noBcon %>% 
+  group_by(Time_days, Treatment) %>% 
+  summarise(avg_cell_per_L = mean(cell_per_L))
+
+ggplot(mixo_mp_gc_noBcon)+
+  geom_point(aes(x = Time_days, y = cell_per_L, color = Treatment))+
+  geom_line(data = mixo_mp_gc_sum_noBcon, aes(x = Time_days, y = avg_cell_per_L, color = Treatment))
+
+```
+
+```{r mixo mp doubling time calc}
+#only between days 2-4 after experiment
+mixo_mp_DT_data <- filter(mixo_mp_gc_sum, Time_days == "2"| Time_days == "4")
+
+mixo_mp_DT_data1 <- cbind(mixo_mp_DT_data[1:4,1:3],mixo_mp_DT_data[5:8,1:3]) 
+
+mixo_mp_DT_calc <- mixo_mp_DT_data1 %>% mutate(Growth_rate = log(avg_cell_per_L1/avg_cell_per_L)/48, Doubling_time = log(2)/Growth_rate)
+
+ggtexttable(mixo_mp_DT_calc[,c(2,7:8)])
+
+#48 is the number of hours the growth rate is calculated from 
+
+#Now to do it without rep B
+mixo_mp_DT_noB_data <- filter(mixo_mp_gc_sum_noBcon, Time_days == "2"| Time_days == "4")
+
+mixo_mp_DT_noB_data1 <- cbind(mixo_mp_DT_noB_data[1:4,1:3],mixo_mp_DT_noB_data[5:8,1:3]) 
+
+mixo_mp_DT_noB_calc <- mixo_mp_DT_noB_data1 %>% mutate(Growth_rate = log(avg_cell_per_L1/avg_cell_per_L)/48, Doubling_time = log(2)/Growth_rate)
+
+ggtexttable(mixo_mp_DT_noB_calc[,c(2,7:8)])
+
+#I am going to attempt to do this from time 0 to peak of all 4 treatments
+
+mixo_mp_DT_data_0to4 <- filter(mixo_mp_gc_sum, Time_days == "0"| Time_days == "4")
+
+mixo_mp_DT_data1_0to4 <- cbind(mixo_mp_DT_data_0to4[1:4,1:3],mixo_mp_DT_data_0to4[5:8,1:3]) 
+
+mixo_mp_DT_calc_0to4 <- mixo_mp_DT_data1_0to4 %>% mutate(Growth_rate = log(avg_cell_per_L1/avg_cell_per_L)/48, Doubling_time = log(2)/Growth_rate)
+
+ggtexttable(mixo_mp_DT_calc_0to4[,c(2,7:8)])
+
+#now wih no rep B
+mixo_mp_DT_noB_data_0to4 <- filter(mixo_mp_gc_sum_noBcon, Time_days == "0"| Time_days == "4")
+
+mixo_mp_DT_noB_data1_0to4 <- cbind(mixo_mp_DT_noB_data_0to4[1:4,1:3],mixo_mp_DT_noB_data_0to4[5:8,1:3]) 
+
+mixo_mp_DT_noB_calc_0to4 <- mixo_mp_DT_noB_data1_0to4 %>% mutate(Growth_rate = log(avg_cell_per_L1/avg_cell_per_L)/48, Doubling_time = log(2)/Growth_rate)
+
+ggtexttable(mixo_mp_DT_noB_calc_0to4[,c(2,7:8)])
+```
+
+```{r Mixo MP mixed modelling on PP}
+mixo_mp_pp_norm_LMM <- lmer(pg_perCELL_perHR ~ Treatment_plastic + (1 + Treatment_plastic|Time_days),
+                            data = mixo_mp_pp_norm)
+
+summary(mixo_mp_pp_norm_LMM)
+
+#I think my data follows a nonlinear trend and may be best suited for using
+# a log tranformation for a GLMM which could be more suitable.
+
+mixo_mp_pp_norm_GLMM <- glmer(pg_perCELL_perHR ~ Treatment_plastic + (1 + Treatment_plastic|Time_days),
+                            data = mixo_mp_pp_norm))
+```
+
+```{r Mixo MP Feeding data}
+mixo_mp_feed <- read.csv("Mixo_MP_feeding_csv.csv")
+
+
+
+mixo_mp_feed_rates <- mixo_mp_feed %>% 
+  mutate(bac_conc_perML = bac_avg/bac_micro_filtered*dil_factor*cor_factor_grid,
+         micro_conc_perML = micro_avg/bac_micro_filtered*dil_factor*cor_factor_grid,
+         BM_ratio = bac_conc_perML/micro_conc_perML,
+         BSP_ingested = (conc_bkgrd_per*BM_ratio) + conc_bkgrd_per,
+         ing_percell_perhour = BSP_ingested*2)
+
+mixo_mp_feed_rates$Treatment_plastic <- as.factor(mixo_mp_feed_rates$Treatment_plastic)
+levels(mixo_mp_feed_rates$Treatment_plastic) <- c("control", "10", "1000","100000")
+
+mixo_mp_feed_rates$Time_days <- as.factor(mixo_mp_feed_rates$Time_days)
+
+ggplot(data = mixo_mp_feed_rates)+
+  geom_boxplot(aes(x = Time_days, y = ing_percell_perhour, fill = Treatment_plastic))
+
+boxplot(ing_percell_perhour ~ Time_days*Treatment_plastic, data = mixo_mp_feed_rates)
+```
+
+Multiply by 2 b/c feeding was done over 30 mins and we want an hourly rate
+Add back in the %ingested initially cause its bacterial size particle ingested
+
+
+#Arctic PP Work
+
+
+```{r 2301 PP 12.5% and 50% 6º}
+setwd("/Users/christophercarnivale/Desktop/Dissertation_data/Data_from_sarah/")
+pp_2301 <- read.csv("PP_2301.csv")
+
+str(pp_2301)
+
+pp_2301$Treatment_light <- factor(pp_2301$Treatment_light)
+
+pp_2301_calc <- pp_2301 %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+pp_2301_50 <- read.csv("PP_2301_50.csv")
+
+pp_2301_50$Treatment_light <- factor(pp_2301_50$Treatment_light)
+
+pp_2301_50_calc <- pp_2301_50 %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+ep_fit_2301_50 <- fitEP(as.numeric(as.character(pp_2301_50_calc$Treatment_light)), pp_2301_50_calc$ugram_Cfixed_per_L_hr)
+
+mod_par1 <- seq(0,200, by = 1)
+
+Pred_2301_50 <- mod_par/((1/(ep_fit_2301_50[["alpha"]][["Estimate"]]*ep_fit_2301_50[["eopt"]][["Estimate"]]^2))*mod_par^2+(1/ep_fit_2301_50[["ps"]][["Estimate"]]-2/(ep_fit_2301_50[["alpha"]][["Estimate"]]*ep_fit_2301_50[["eopt"]][["Estimate"]]))*mod_par+(1/ep_fit_2301_50[["alpha"]][["Estimate"]]))
+
+Pred_2301_50_df <- as.data.frame(cbind(mod_par1,Pred_2301_50))
+
+pp_2301_50_plot <- ggplot()+
+  geom_line(data = Pred_2301_50_df, aes(x = mod_par1,y = Pred_2301_50))+
+  geom_point(data = pp_2301_50_calc, aes(x = as.numeric(as.character(Treatment_light)), y = ugram_Cfixed_per_L_hr))
+
+pp_2301_50_plot
+
+str(pp_2301_calc)
+
+ggplot(pp_2301_calc,aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot()
+
+ggplot(filter(pp_2301_calc, !Treatment_light == "0"),aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot()
+
+ggplot()+
+  geom_point(data = pp_2301_50_calc, aes(x = as.numeric(as.character(Treatment_light)), y = ugram_Cfixed_per_L_hr))
+    
+```
+
+```{r 2290 PP 50% and 12.5% 4º}
+setwd("/Users/christophercarnivale/Desktop/Dissertation_data/Data_from_sarah/")
+pp_2290 <- read.csv("PP_2290_50.csv")
+
+str(pp_2290)
+
+pp_2290$Treatment_light <- factor(pp_2290$Treatment_light)
+
+pp_2290_calc <- pp_2290 %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+pp_2290_125 <- read.csv("PP_2290_125.csv")
+
+pp_2290_125_calc <- pp_2290_125 %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+#str(pp_2290_calc)
+
+ggplot(pp_2290_calc,aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot()
+
+ggplot(filter(pp_2290_calc, !Treatment_light == "0"),aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot()
+
+pp_2290_4C_50_point_plot <- ggplot(pp_2290_calc,aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_point()+
+  ylab("")+
+  xlab("")+
+  ylim(0,6)
+
+pp_2290_4C_125_point_plot <- ggplot(pp_2290_125_calc,aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_point()+
+  ylab("")+
+  xlab("")+
+  ylim(0,6)
+
+#fitEP(pp_2290_calc) it needs an x and y vectors and not a datafram
+
+fitEP(x = pp_2290_calc$Treatment_light,y = pp_2290_calc$ugram_Cfixed_per_L_hr)
+#That doesn't work
+
+#data("rlcs")
+#iew(rlcs)
+
+#A single RLC from Rep A
+
+pp_2290_single_RLC <- filter(pp_2290_calc, Rep == "A")
+
+ep_fit <- fitEP(as.numeric(as.character(pp_2290_single_RLC$Treatment_light)), pp_2290_single_RLC$ugram_Cfixed_per_L_hr)
+
+#as.double(pp_2290_single_RLC$Treatment_light)
+
+#droplevels(pp_2290_single_RLC$Treatment_light)
+#both of the above didn't work to convert from factor to number
+
+as.numeric(as.character(pp_2290_single_RLC$Treatment_light))
+
+ep_fit
+
+#plot(ep_fit)
+
+mod_par <- seq(0,200, by = 1)
+with(ep_fit,{
+P <- mod_par/((1/(alpha[1]*eopt[1]^2))*mod_par^2+(1/ps[1]-2/(alpha[1]*eopt[1]))*mod_par+(1/alpha[1]))
+plot.new()+
+plot(mod_par,P, type = "l")
+})
+
+Pred <- mod_par/((1/(ep_fit[["alpha"]][["Estimate"]]*ep_fit[["eopt"]][["Estimate"]]^2))*mod_par^2+(1/ep_fit[["ps"]][["Estimate"]]-2/(ep_fit[["alpha"]][["Estimate"]]*ep_fit[["eopt"]][["Estimate"]]))*mod_par+(1/ep_fit[["alpha"]][["Estimate"]]))
+
+#P
+
+plot(pp_2290_single_RLC$Treatment_light, pp_2290_single_RLC$ugram_Cfixed_per_L_hr, type = "p") 
+
+#plot(mod_par,P, type = "l")
+
+EP_mod_data <- as.data.frame(cbind(mod_par, Pred))
+
+ggplot()+
+  geom_line(data = EP_mod_data, aes(x = mod_par,y = Pred))+
+  geom_point(data = pp_2290_single_RLC, aes(x = as.numeric(as.character(Treatment_light)), y = ugram_Cfixed_per_L_hr))
+
+
+pp_2290_calc_ord <- arrange(pp_2290_calc, Rep)
+
+id <- unique(pp_2290_calc$Rep)
+
+n <- length(id)
+
+alpha <-  array(NA, c(n,4))
+eopt <-  array(NA, c(n,4))
+ps <-  array(NA, c(n,4))
+ssr <-  array(NA, c(n,4))
+Residuals <-  array(NA, c(n,4))
+
+PAR1 <- array(NA, c(n,4))
+C_fixed1 <- array(NA, c(n,4))
+
+for(i in 1:n){
+  PAR <- as.numeric(as.character(pp_2290_calc_ord$Treatment_light[pp_2290_calc_ord$Rep == id[i]]))
+  C_fixed <- pp_2290_calc_ord$ugram_Cfixed_per_L_hr[pp_2290_calc_ord$Rep == id[i]]
+  
+  PP_fit <- fitEP(PAR, C_fixed, normalize = TRUE)
+#normalized parameters for comparison to other 
+  alpha[i,] <- PP_fit$alpha
+  eopt[i,] <- PP_fit$eopt
+  ps[i,] <- PP_fit$ps
+  ssr[i,] <- PP_fit$ssr
+  Residuals[i,] <- PP_fit$residuals
+  
+}
+
+for(i in 1:n){
+  PAR <- as.numeric(as.character(pp_2290_calc_ord$Treatment_light[pp_2290_calc_ord$Rep == id[i]]))
+  C_fixed <- pp_2290_calc_ord$ugram_Cfixed_per_L_hr[pp_2290_calc_ord$Rep == id[i]]
+  
+  PP_fit <- fitEP(PAR, C_fixed, normalize = FALSE)
+#non normalized parameters
+  alpha[i,] <- PP_fit$alpha
+  eopt[i,] <- PP_fit$eopt
+  ps[i,] <- PP_fit$ps
+  ssr[i,] <- PP_fit$ssr
+  Residuals[i,] <- PP_fit$residuals
+  
+  }
+
+for(i in 1:n){
+  PAR1[i,] <- as.numeric(as.character(pp_2290_calc_ord$Treatment_light[pp_2290_calc_ord$Rep == id[i]]))
+  C_fixed1[i,] <- pp_2290_calc_ord$ugram_Cfixed_per_L_hr[pp_2290_calc_ord$Rep == id[i]]
+  #This is a check to make sure my for loop is indaxing properly
+}
+
+
+
+#nls(formula = ugram_Cfixed_per_L_hr ~ Pmax * ((2*(2+b)*Treatment_light/opt_light)/((Treatment_light/opt_light)^2+2*b*Treatment_light/opt_light+1)), 
+            #data = pp_2290_single_RLC, 
+            #start = list(opt_light = 100, Pmax = 5.6581134, b = 0.5))
+#nls() wasn't working and I'm not sure why but I don't need it when I can use
+#phytotools package to do the same exact thing
+
+#Prior I have plotted the prediction of the single RLC model
+
+#Next chunk is model to the average of the 4 reps
+
+
+pp_2290_sum <- pp_2290_calc %>% 
+  group_by(Treatment_light) %>% 
+  summarise(avg_ugram_per_L_per_HR = mean(ugram_Cfixed_per_L_hr))
+
+ep_fit_50 <- fitEP(as.numeric(as.character(pp_2290_sum$Treatment_light)), pp_2290_sum$avg_ugram_per_L_per_HR)
+
+Pred_2290 <- mod_par/((1/(ep_fit_50[["alpha"]][["Estimate"]]*ep_fit_50[["eopt"]][["Estimate"]]^2))*mod_par^2+(1/ep_fit_50[["ps"]][["Estimate"]]-2/(ep_fit_50[["alpha"]][["Estimate"]]*ep_fit_50[["eopt"]][["Estimate"]]))*mod_par+(1/ep_fit_50[["alpha"]][["Estimate"]]))
+
+Pred_2290_df <- as.data.frame(cbind(mod_par,Pred_2290))
+
+ggplot()+
+  geom_line(data = Pred_2290_df, aes(x = mod_par,y = Pred_2290))+
+  geom_point(data = pp_2290_calc, aes(x = as.numeric(as.character(Treatment_light)), y = ugram_Cfixed_per_L_hr))
+
+#trying to get model for all 4 reps at once
+
+ep_fit_4rep <- fitEP(as.numeric(as.character(pp_2290_calc$Treatment_light)), pp_2290_calc$ugram_Cfixed_per_L_hr)
+
+ep_fit_4rep
+
+Pred_2290_4rep <- mod_par/((1/(ep_fit_4rep[["alpha"]][["Estimate"]]*ep_fit_4rep[["eopt"]][["Estimate"]]^2))*mod_par^2+(1/ep_fit_4rep[["ps"]][["Estimate"]]-2/(ep_fit_4rep[["alpha"]][["Estimate"]]*ep_fit_4rep[["eopt"]][["Estimate"]]))*mod_par+(1/ep_fit_4rep[["alpha"]][["Estimate"]]))
+
+Pred_2290_4rep_df <- as.data.frame(cbind(mod_par,Pred_2290))
+
+pp_2290_50_plot <- ggplot()+
+  geom_line(data = Pred_2290_4rep_df, aes(x = mod_par,y = Pred_2290))+
+  geom_point(data = pp_2290_calc, aes(x = as.numeric(as.character(Treatment_light)), y = ugram_Cfixed_per_L_hr))+xlab("Light Intensity")+ylab("ugrams_Cfixed_perhour")
+
+#Plot for 2290 12.5%
+
+ep_fit_125 <- fitEP(as.numeric(as.character(pp_2290_125_calc$Treatment_light)), pp_2290_125_calc$ugram_Cfixed_per_L_hr)
+
+ep_fit_125
+
+Pred_2290_125 <- mod_par/((1/(ep_fit_125[["alpha"]][["Estimate"]]*ep_fit_125[["eopt"]][["Estimate"]]^2))*mod_par^2+(1/ep_fit_125[["ps"]][["Estimate"]]-2/(ep_fit_125[["alpha"]][["Estimate"]]*ep_fit_125[["eopt"]][["Estimate"]]))*mod_par+(1/ep_fit_125[["alpha"]][["Estimate"]]))
+
+Pred_2290_125_df <- as.data.frame(cbind(mod_par,Pred_2290_125))
+
+pp_2290_125_plot <- ggplot()+
+  geom_line(data = Pred_2290_125_df, aes(x = mod_par,y = Pred_2290_125))+
+  geom_point(data = pp_2290_125_calc, aes(x = as.numeric(as.character(Treatment_light)), y = ugram_Cfixed_per_L_hr))
+
+ggarrange(pp_2290_50_plot,pp_2290_125_plot)
+
+```
+
+```{r PP 2290 50, 12.5 at 6C}
+setwd("/Users/christophercarnivale/Desktop/Dissertation_data/Data_from_sarah/")
+pp_2290_6C_50 <- read.csv("PP_2290_50_6C.csv")
+
+str(pp_2290_6C_50)
+
+pp_2290_6C_50$Treatment_light <- factor(pp_2290_6C_50$Treatment_light)
+
+pp_2290_6C_50_calc <- pp_2290_6C_50 %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+pp_2290_6C_50_pointplot <- ggplot(pp_2290_6C_50_calc,aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_point()+
+  ylab("")+
+  xlab("")+
+  ylim(0,6)
+
+pp_2290_6C_125 <- read.csv("PP_2290_125_6C.csv")
+
+str(pp_2290_6C_125)
+
+pp_2290_6C_125$Treatment_light <- factor(pp_2290_6C_125$Treatment_light)
+
+pp_2290_6C_125_calc <- pp_2290_6C_125 %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+pp_2290_6C_125_pointplot <- ggplot(pp_2290_6C_125_calc,aes(x = Treatment_light, y = ugram_Cfixed_per_L_hr))+
+  geom_point()+
+  ylab("")+
+  xlab("")+
+  ylim(0,6)
+
+pp_2290_6C_125_pointplot
+
+ggarrange(pp_2290_6C_125_pointplot,pp_2290_6C_50_pointplot)
+
+PP_2290_4and6 <- ggarrange(pp_2290_4C_50_point_plot,pp_2290_6C_50_pointplot, pp_2290_4C_125_point_plot, pp_2290_6C_125_pointplot, labels = c("A", "B", "C", "D"))
+
+annotate_figure(PP_2290_4and6,
+                top = "P vs I curves of Dinobryon at 4ªC and 6ªC",
+                left = "Carbon Fixation Rate (ug/Lhr)",
+                bottom = "A and C are 4ªC              B and D are 6ªC")
+```
+
+```{r running mixo_mp_controlrun}
+mixo_mp_pp_controlrun <- read.csv("/Users/christophercarnivale/Desktop/Dissertation_data/Microplastic_physiological_response/mixo_mp_pp_controlrun.csv")
+
+mixo_mp_pp_controlrun_calc <- mixo_mp_pp_controlrun %>% mutate(pp_DPM = pp_CPM/C_14_efficiency, bkgr_DPM = background_CPM/C_14_efficiency/0.1, ugram_Cfixed_per_L_hr = pp_DPM*DIC.umol.kg./bkgr_DPM*12*1.029/2)
+
+ggplot(mixo_mp_pp_controlrun_calc, aes(x = Treatment_plastic, y = ugram_Cfixed_per_L_hr))+
+  geom_boxplot()
+```
+
+
